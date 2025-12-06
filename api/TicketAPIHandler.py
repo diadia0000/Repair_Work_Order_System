@@ -240,7 +240,13 @@ def lambda_handler(event, context):
             
             # 嘗試從 pathParameters 獲取 ticket_id (如果 API Gateway 有設定 {id})
             path_params = event.get('pathParameters')
-            ticket_id = path_params.get('id') if path_params else body.get('ticket_id')
+            ticket_id = None
+            if path_params:
+                # 嘗試抓 id 或 ticket_id，看你在 API Gateway 怎麼命名的
+                ticket_id = path_params.get('id') or path_params.get('ticket_id')
+
+            if not ticket_id:
+                ticket_id = body.get('ticket_id')
             
             if not ticket_id:
                 return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Missing ticket_id'})}
@@ -260,10 +266,10 @@ def lambda_handler(event, context):
                 return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'No fields to update'})}
 
         # --- Delete (DELETE) ---
-        # 假設路徑是 /tickets/123，但 API Gateway 可能沒設好 Proxy，
-        # 我們先假設 ticket_id 放在 QueryString 或 Body 傳進來比較保險
         elif method == 'DELETE':
-            body = json.loads(event.get('body', '{}'))
+            # [修正 1] 安全地解析 Body，防止 DELETE 請求沒有 Body 時報錯
+            raw_body = event.get('body')
+            body = json.loads(raw_body) if raw_body else {}
             
             # 嘗試從 pathParameters 獲取 ticket_id
             path_params = event.get('pathParameters')
@@ -271,7 +277,6 @@ def lambda_handler(event, context):
             
             if ticket_id:
                 # 權限檢查：Admin 或 Owner 才能刪除
-                # 先讀取工單確認 Owner
                 try:
                     response = table.get_item(Key={'ticket_id': ticket_id})
                     item = response.get('Item')
@@ -279,7 +284,9 @@ def lambda_handler(event, context):
                     if not item:
                         return {'statusCode': 404, 'headers': headers, 'body': json.dumps({'error': 'Ticket not found'})}
                     
+                    # [修正 2] 確保變數存在，防止 None 比較錯誤
                     owner_email = item.get('user_email')
+                    # 這裡的 user_email 來自最上面的 JWT 解析
                     is_owner = user_email and (user_email == owner_email)
                     
                     if not (is_admin or is_owner):
@@ -288,8 +295,8 @@ def lambda_handler(event, context):
                     table.delete_item(Key={'ticket_id': ticket_id})
                     return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'message': 'Deleted'})}
                 except Exception as e:
-                    print(f"Delete check error: {e}")
-                    return {'statusCode': 500, 'headers': headers, 'body': json.dumps({'error': 'Internal Server Error'})}
+                    print(f"Delete error: {str(e)}") # 建議把錯誤印出來，去 CloudWatch 比較好查
+                    return {'statusCode': 500, 'headers': headers, 'body': json.dumps({'error': f'Delete failed: {str(e)}'})}
             else:
                 return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Missing ticket_id'})}
 

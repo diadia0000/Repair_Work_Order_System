@@ -14,10 +14,10 @@ export const ticketService = {
     try {
       const data = await fetchAPI(API_ENDPOINTS.tickets);
       console.log('[TicketService] Raw API response:', data);
-      
+
       // 處理多種可能的回應格式
       let items: Ticket[] = [];
-      
+
       if (Array.isArray(data)) {
         // 直接是陣列: [...]
         items = data;
@@ -31,7 +31,7 @@ export const ticketService = {
         console.warn('[TicketService] Unknown data format:', data);
         return [];
       }
-      
+
       console.log('[TicketService] Parsed tickets:', items.length);
       return items;
     } catch (error) {
@@ -102,7 +102,7 @@ export const ticketService = {
 
   /**
    * 更新工單狀態
-   * PATCH /tickets/{ticket_id}
+   * 改用 PUT 以配合標準 RESTful 風格及簡化 Gateway 設定
    */
   async updateTicket(
     ticketId: string,
@@ -110,7 +110,7 @@ export const ticketService = {
   ): Promise<void> {
     try {
       await fetchAPI(API_ENDPOINTS.ticketById(ticketId), {
-        method: 'PATCH',
+        method: 'PUT',
         body: JSON.stringify({ status }),
       });
       console.log('[TicketService] Updated ticket:', ticketId, 'to', status);

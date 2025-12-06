@@ -97,3 +97,4 @@ Desktop.ini
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+dist/
