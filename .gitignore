@@ -1,0 +1,99 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Testing
+/coverage
+
+# Production
+/build
+/dist
+*.tsbuildinfo
+
+# React / Next.js
+.next/
+out/
+.vercel
+
+# TailwindCSS
+.tailwindcss-*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# IDEs and editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# AWS
+.aws-sam/
+samconfig.toml
+.serverless/
+.lambda-packages/
+*.zip
+.chalice/deployments/
+.chalice/venv/
+
+# AWS Amplify
+amplify/backend/awscloudformation/
+amplify/\#current-cloud-backend/
+amplify/.config/local-*
+awsconfiguration.json
+amplifyconfiguration.json
+amplifyconfiguration.dart
+aws-exports.js
+
+# Serverless Framework
+.serverless*/
+serverless.yml.backup
+
+# CDK
+cdk.out/
+.cdk.staging/
+cdk.context.json
+
+# SAM
+.aws-sam/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Package manager lock files (optional - uncomment if needed)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
