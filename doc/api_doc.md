@@ -1,196 +1,244 @@
-# Repair Work Order System - API Documentation
+# API 文件
 
-## Overview
+## 系統架構
 
-Backend API 基於 AWS Lambda + API Gateway 構建，提供修繕工單的 CRUD 操作。透過 SQS 與 SNS 實現非同步通知功能。
+```
+使用者請求
+    ↓
+API Gateway (REST API)
+    ↓
+Lambda: TicketAPIHandler
+    ├── DynamoDB: TicketTable (工單資料)
+    ├── S3: 圖片儲存
+    └── SQS: TicketQueue (通知佇列)
+           ↓
+        Lambda: NotificationWorker
+           ↓
+        SNS → Email 通知
+```
+
+**認證**: AWS Cognito (JWT Token)  
+**權限**: Admin 與 User
 
 ---
 
-## Architecture
+## API 端點
 
+### 使用者管理
+
+#### 註冊
+```http
+POST /tickets
 ```
-API Gateway → Lambda (TicketAPIHandler) → DynamoDB (TicketTable)
-                                       ↓
-                                    SQS Queue
-                                       ↓
-                              Lambda (TicketNotificationWorker)
-                                       ↓
-                                    SNS → Email
+```json
+{
+  "action": "register",
+  "email": "user@example.com",
+  "password": "password123",
+  "name": "使用者名稱"
+}
+```
+
+#### 登入
+```http
+POST /tickets
+```
+```json
+{
+  "action": "login",
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+**回應**:
+```json
+{
+  "message": "Login successful",
+  "user": {
+    "email": "user@example.com",
+    "name": "使用者名稱"
+  }
+}
 ```
 
 ---
 
-## Endpoints
+### 工單操作
 
-### 1. Create Ticket
+#### 查詢所有工單
+```http
+GET /tickets
+Authorization: Bearer {JWT_TOKEN}
+```
+**回應**:
+```json
+{
+  "count": 2,
+  "items": [
+    {
+      "ticket_id": "550e8400-...",
+      "title": "冷氣故障",
+      "description": "307 教室冷氣無法啟動",
+      "priority": "High",
+      "status": "Open",
+      "created_at": "2025-12-06T14:30:00",
+      "user_email": "student@school.edu.tw",
+      "user_name": "王小明",
+      "images": ["https://s3.../image.jpg"]
+    }
+  ]
+}
+```
 
-**Method:** `POST` `/tickets`
-
-**Request Body:**
+#### 建立工單
+```http
+POST /tickets
+Authorization: Bearer {JWT_TOKEN}
+```
 ```json
 {
   "title": "冷氣故障",
   "description": "307 教室冷氣無法啟動",
   "priority": "High",
-  "user_email": "student@school.edu.tw"
+  "user_email": "student@school.edu.tw",
+  "user_name": "王小明",
+  "images": ["https://s3.../image.jpg"]
 }
 ```
+建立後自動發送 Email 通知
 
-**Response:** `200 OK`
+#### 更新工單狀態 (Admin only)
+```http
+PUT /tickets/{ticket_id}
+Authorization: Bearer {JWT_TOKEN}
+```
 ```json
 {
-  "message": "Success",
-  "ticket_id": "550e8400-e29b-41d4-a716-446655440000"
+  "status": "Processing"
 }
 ```
 
-**Flow:**
-1. 生成 UUID 作為工單 ID
-2. 寫入 DynamoDB (狀態預設為 Open)
-3. 發送訊息到 SQS Queue 供通知 Worker 處理
-
----
-
-### 2. Get All Tickets
-
-**Method:** `GET` `/tickets`
-
-**Response:** `200 OK`
-```json
-[
-  {
-    "ticket_id": "550e8400-e29b-41d4-a716-446655440000",
-    "title": "冷氣故障",
-    "description": "307 教室冷氣無法啟動",
-    "priority": "High",
-    "status": "Open",
-    "created_at": "2025-12-06T14:30:00.000000",
-    "user_email": "student@school.edu.tw"
-  }
-]
+#### 刪除工單 (Admin or Owner)
+```http
+DELETE /tickets/{ticket_id}
+Authorization: Bearer {JWT_TOKEN}
 ```
 
-**Note:** 使用 DynamoDB Scan，回傳所有工單。
-
 ---
 
-### 3. Delete Ticket
+### 圖片上傳
 
-**Method:** `DELETE` `/tickets`
-
-**Request Body:**
+#### 取得上傳 URL
+```http
+POST /tickets
+Authorization: Bearer {JWT_TOKEN}
+```
 ```json
 {
-  "ticket_id": "550e8400-e29b-41d4-a716-446655440000"
+  "action": "get_upload_url",
+  "file_name": "photo.jpg",
+  "file_type": "image/jpeg"
 }
 ```
-
-**Response:** `200 OK`
+**回應**:
 ```json
 {
-  "message": "Deleted"
+  "upload_url": "https://s3.../presigned-url",
+  "image_url": "https://s3.../photo.jpg",
+  "key": "tickets/uuid/photo.jpg"
 }
 ```
 
+**上傳流程**:
+1. 呼叫此 API 取得 `upload_url`
+2. 用 PUT 上傳檔案到 `upload_url`
+3. 將 `image_url` 儲存到工單資料
+
 ---
 
-## CORS Configuration
+## 資料結構
 
-所有 Response 包含以下 Headers：
+### DynamoDB: TicketTable
 
+| 欄位        | 型別   | 說明                   |
+| ----------- | ------ | ---------------------- |
+| ticket_id   | String | Partition Key (UUID)   |
+| type        | String | "ticket" 或 "user"     |
+| title       | String | 工單標題               |
+| description | String | 詳細說明               |
+| priority    | String | Low/Medium/High        |
+| status      | String | Open/Processing/Closed |
+| user_email  | String | 報告者 Email           |
+| user_name   | String | 報告者姓名             |
+| images      | List   | 圖片 URL 陣列          |
+| created_at  | String | ISO 8601 時間戳        |
+
+**備註**: 使用者資料的 ticket_id 為 `USER#{email}` 格式
+
+---
+
+## 錯誤處理
+
+| Status | 說明         |
+| ------ | ------------ |
+| 400    | 缺少必要參數 |
+| 401    | 登入失敗     |
+| 403    | 權限不足     |
+| 404    | 路由不存在   |
+| 500    | 伺服器錯誤   |
+
+---
+
+## AWS 服務配置
+
+### Lambda Function
+
+**TicketAPIHandler**
+- Runtime: Python 3.x
+- Memory: 512 MB
+- Timeout: 30s
+- Permissions: DynamoDB, SQS, S3
+
+**TicketNotificationWorker**
+- Trigger: SQS
+- Runtime: Python 3.x
+- Permissions: SNS
+
+### 其他服務
+
+**SQS Queue**: TicketQueue (Standard)  
+**SNS Topic**: TicketNotificationTopic  
+**S3 Bucket**: repair-work-order-system  
+**DynamoDB Table**: TicketTable
+
+---
+
+## 環境變數
+
+在 `TicketAPIHandler.py`:
+```python
+SQS_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/.../TicketQueue'
+TABLE_NAME = 'TicketTable'
+S3_BUCKET_NAME = 'repair-work-order-system'
 ```
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE
-Access-Control-Allow-Headers: Content-Type, Authorization
-```
 
-OPTIONS 預檢請求直接回傳 200。
-
----
-
-## AWS Services
-
-### DynamoDB (TicketTable)
-
-| Field         | Type   | Notes                         |
-| ------------- | ------ | ----------------------------- |
-| `ticket_id`   | String | Partition Key (UUID)          |
-| `title`       | String | 工單標題                      |
-| `description` | String | 詳細說明                      |
-| `priority`    | String | High / Medium / Low           |
-| `status`      | String | Open / In Progress / Resolved |
-| `created_at`  | String | ISO 8601 格式時間戳           |
-| `user_email`  | String | 報告人 Email                  |
-
-### SQS Queue (TicketQueue)
-
-工單建立時觸發，訊息內容：
-
-```json
-{
-  "ticket_id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "冷氣故障",
-  "email": "student@school.edu.tw",
-  "type": "TICKET_CREATED"
-}
-```
-
-### SNS Topic (TicketNotificationTopic)
-
-接收 SQS 訊息，以 Email 通知用戶。
-
----
-
-## Error Handling
-
-| Status | Response                         | Cause                   |
-| ------ | -------------------------------- | ----------------------- |
-| `400`  | `{"error": "Missing ticket_id"}` | DELETE 請求缺少必要參數 |
-| `404`  | `{"error": "Not Found"}`         | 路由不存在              |
-| `500`  | `{"error": "..."}`               | 伺服器錯誤              |
-
----
-
-## Implementation Notes
-
-1. **Decimal Encoding:** DynamoDB 返回的數值使用 `decimal.Decimal` 型別，需透過自訂 JSONEncoder 轉換為 Float。
-
-2. **SQS 訊息格式:** 一次可能收到多筆紀錄，需迴圈處理 `event['Records']`。
-
-3. **Lambda 冷啟動:** 首次調用可能有 1-2 秒延遲。生產環境可使用 Provisioned Concurrency 優化。
-
-4. **Scan vs Query:** 當前使用 Scan 遍歷全表。若資料量大，應改用 Query + GSI。
-
----
-
-## Testing with curl
-
-```bash
-# 建立工單
-curl -X POST https://your-api-endpoint/tickets \
-  -H "Content-Type: application/json" \
-  -d '{"title":"冷氣故障","priority":"High","user_email":"test@example.com"}'
-
-# 查詢所有工單
-curl -X GET https://your-api-endpoint/tickets
-
-# 刪除工單
-curl -X DELETE https://your-api-endpoint/tickets \
-  -H "Content-Type: application/json" \
-  -d '{"ticket_id":"your-ticket-id"}'
-
-# OPTIONS 預檢
-curl -X OPTIONS https://your-api-endpoint/tickets
+在 `TicketNotificationWorker.py`:
+```python
+SNS_TOPIC_ARN = 'arn:aws:sns:us-east-1:.../TicketNotificationTopic'
 ```
 
 ---
 
-## Configuration Required
+## 實作細節
 
-| 項目          | 位置                        | 說明                |
-| ------------- | --------------------------- | ------------------- |
-| SQS_QUEUE_URL | TicketAPIHandler.py         | SQS Queue URL       |
-| TABLE_NAME    | TicketAPIHandler.py         | DynamoDB Table 名稱 |
-| SNS_TOPIC_ARN | TicketNotificationWorker.py | SNS Topic ARN       |
+### JWT Token 驗證
+從 Authorization Header 解析 JWT，取得 email 和 groups 資訊判斷權限
 
-需在環境變數或程式碼中設定上述參數。
+### 密碼安全
+使用 SHA-256 搭配 email 作為 salt 雜湊儲存
+
+### S3 Pre-signed URL
+產生 5 分鐘有效期的上傳連結，避免直接暴露 S3 憑證
+
+### 通知機制
+建立工單時發送訊息到 SQS → Lambda 消費訊息 → SNS 發送 Email
