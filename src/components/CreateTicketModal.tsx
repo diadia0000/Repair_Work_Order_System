@@ -1,26 +1,54 @@
-import { useState } from 'react';
-import { X } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { X, Upload, Trash2 } from 'lucide-react';
 import { PriorityLevel } from './TicketCard';
 
 interface CreateTicketModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (ticket: { title: string; description: string; priority: PriorityLevel }) => void;
+  onSubmit: (ticket: { title: string; description: string; priority: PriorityLevel; images: File[] }) => void;
 }
 
 export function CreateTicketModal({ isOpen, onClose, onSubmit }: CreateTicketModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<PriorityLevel>('Medium');
+  const [images, setImages] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ title, description, priority });
+    onSubmit({ title, description, priority, images });
     // Reset form
     setTitle('');
     setDescription('');
     setPriority('Medium');
+    setImages([]);
     onClose();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setImages(prev => [...prev, ...newFiles].slice(0, 5));
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files) {
+      const newFiles = Array.from(e.dataTransfer.files).filter(file => 
+        file.type.startsWith('image/')
+      );
+      setImages(prev => [...prev, ...newFiles].slice(0, 5));
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
   };
 
   if (!isOpen) return null;
@@ -83,10 +111,74 @@ export function CreateTicketModal({ isOpen, onClose, onSubmit }: CreateTicketMod
             </small>
           </div>
 
-          {/* Priority Level */}
+          {/* Attach Images */}
+          <div>
+            <label className="block mb-2 text-[#334155]">
+              Attach Images <span className="text-[#64748B] font-normal">(Optional)</span>
+            </label>
+            <div 
+              className="border-2 border-dashed border-[#E2E8F0] rounded-lg p-8 text-center hover:bg-[#F8FAFC] transition-colors cursor-pointer group"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                multiple 
+                accept="image/png, image/jpeg, image/gif"
+                onChange={handleFileChange}
+              />
+              <div className="flex flex-col items-center gap-2">
+                <div className="p-3 bg-[#EFF6FF] rounded-full text-[#2563EB] mb-2 group-hover:bg-[#DBEAFE] transition-colors">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <p className="text-[#334155]">
+                  Drag and drop images here, or <span className="text-[#2563EB]">browse</span>
+                </p>
+                <p className="text-sm text-[#64748B]">
+                  PNG, JPG, GIF up to 5MB (Max 5 images)
+                </p>
+              </div>
+            </div>
+
+            {/* Image Preview List */}
+            {images.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {images.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-[#F8FAFC] rounded-lg border border-[#E2E8F0]">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-[#E2E8F0] rounded-lg flex items-center justify-center overflow-hidden">
+                        <img 
+                          src={URL.createObjectURL(file)} 
+                          alt="Preview" 
+                          className="w-full h-full object-cover"
+                          onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[#334155] truncate max-w-[200px]">{file.name}</p>
+                        <p className="text-xs text-[#64748B]">{(file.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="p-2 text-[#94A3B8] hover:text-[#EF4444] hover:bg-[#FEF2F2] rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Urgency Level */}
           <div>
             <label htmlFor="priority" className="block mb-2 text-[#334155]">
-              Priority Level <span className="text-[#EF4444]">*</span>
+              Urgency Level <span className="text-[#EF4444]">*</span>
             </label>
             <select
               id="priority"

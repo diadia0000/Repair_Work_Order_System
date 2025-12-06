@@ -76,6 +76,33 @@ export const ticketService = {
   },
 
   /**
+   * 取得 S3 上傳 URL
+   */
+  async getUploadUrl(fileName: string, fileType: string): Promise<{ upload_url: string; image_url: string; key: string }> {
+    return fetchAPI(API_ENDPOINTS.tickets, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'get_upload_url', file_name: fileName, file_type: fileType }),
+    });
+  },
+
+  /**
+   * 上傳檔案到 S3
+   */
+  async uploadToS3(uploadUrl: string, file: File): Promise<void> {
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to upload image to S3');
+    }
+  },
+
+  /**
    * 建立新工單
    * POST /tickets
    * 會觸發 SQS 訊息並發送 SNS Email 通知
@@ -86,6 +113,7 @@ export const ticketService = {
     priority: PriorityLevel;
     user_email: string;
     user_name?: string;
+    images?: string[];
   }): Promise<{ message: string; ticket_id: string }> {
     try {
       const data = await fetchAPI(API_ENDPOINTS.tickets, {

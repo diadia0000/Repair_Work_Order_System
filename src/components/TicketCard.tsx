@@ -1,4 +1,4 @@
-import { Clock, AlertCircle } from 'lucide-react';
+import { Clock, AlertCircle, Image as ImageIcon } from 'lucide-react';
 
 export type TicketStatus = 'Open' | 'Processing' | 'Closed';
 export type PriorityLevel = 'Low' | 'Medium' | 'High';
@@ -13,6 +13,7 @@ export interface Ticket {
   status: TicketStatus;
   priority: PriorityLevel;
   created_at: string;
+  images?: string[];
 }
 
 interface TicketCardProps {
@@ -47,13 +48,8 @@ export function TicketCard({ ticket, onClick }: TicketCardProps) {
   const formatDate = (isoString: string) => {
     try {
       const date = new Date(isoString);
-      return date.toLocaleString('zh-TW', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      // 使用本地時間格式 YYYY-MM-DD
+      return date.toLocaleDateString('en-CA');
     } catch {
       return isoString;
     }
@@ -62,36 +58,48 @@ export function TicketCard({ ticket, onClick }: TicketCardProps) {
   return (
     <div
       onClick={onClick}
-      className="card card-hover p-6 cursor-pointer flex flex-col h-full"
+      className="card card-hover p-6 cursor-pointer flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all"
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <h3 className="flex-1 line-clamp-2">{ticket.title}</h3>
-        <span className={`px-3 py-1 rounded-full text-xs border whitespace-nowrap shrink-0 ${getStatusStyle(ticket.status)}`}>
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <h3 className="flex-1 line-clamp-2 font-semibold text-[#1E293B] text-lg">{ticket.title}</h3>
+        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 ${getStatusStyle(ticket.status)}`}>
           {ticket.status}
         </span>
       </div>
 
       {/* Description */}
-      <p className="text-[#64748B] line-clamp-3 mb-4 flex-1">
+      <p className="text-[#64748B] text-sm line-clamp-3 mb-4 flex-1 leading-relaxed">
         {ticket.description}
       </p>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#E2E8F0]">
-        <div className="flex items-center gap-1 text-[#64748B]">
-          <Clock className="w-4 h-4 shrink-0" />
-          <small className="whitespace-nowrap">{formatDate(ticket.created_at)}</small>
+      {/* Image Indicator */}
+      {ticket.images && ticket.images.length > 0 && (
+        <div className="flex items-center gap-1.5 text-[#2563EB] mb-4">
+          <ImageIcon className="w-4 h-4" />
+          <span className="text-xs font-medium">
+            {ticket.images.length} image{ticket.images.length > 1 ? 's' : ''} attached
+          </span>
         </div>
-        <div className={`flex items-center gap-1 ${getPriorityColor(ticket.priority)}`}>
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <small className="whitespace-nowrap">{ticket.priority}</small>
+      )}
+
+      {/* Divider */}
+      <div className="h-px bg-slate-100 w-full mb-4"></div>
+
+      {/* Footer Info */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-1.5 text-[#94A3B8]">
+          <Clock className="w-3.5 h-3.5" />
+          <span className="text-xs">{formatDate(ticket.created_at)}</span>
+        </div>
+        <div className={`flex items-center gap-1.5 ${getPriorityColor(ticket.priority)}`}>
+          <AlertCircle className="w-3.5 h-3.5" />
+          <span className="text-xs font-medium">{ticket.priority}</span>
         </div>
       </div>
-
-      {/* User ID */}
-      <div className="mt-3 pt-3 border-t border-[#E2E8F0]">
-        <small className="text-[#94A3B8]">By {ticket.user_name || ticket.user_email?.split('@')[0] || 'Unknown'}</small>
+      
+      <div className="mt-auto">
+         <span className="text-xs text-[#94A3B8]">By {ticket.user_name || ticket.user_email?.split('@')[0] || 'Unknown'}</span>
       </div>
     </div>
   );

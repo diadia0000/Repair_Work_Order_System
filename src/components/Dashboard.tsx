@@ -6,7 +6,7 @@ import { TicketDetailModal } from './TicketDetailModal';
 
 interface DashboardProps {
   tickets: Ticket[];
-  onCreateTicket: (ticket: { title: string; description: string; priority: string }) => void;
+  onCreateTicket: (ticket: { title: string; description: string; priority: string; images?: File[] }) => void;
   onUpdateTicketStatus: (ticketId: string, newStatus: TicketStatus) => void;
   onDeleteTicket: (ticketId: string) => void;
   onLogout: () => void;

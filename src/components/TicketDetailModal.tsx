@@ -1,4 +1,5 @@
-import { X, AlertCircle, User, Calendar, Trash2, CheckCircle, PlayCircle, StopCircle } from 'lucide-react';
+import { useState } from 'react';
+import { X, AlertCircle, User, Calendar, Trash2, CheckCircle, PlayCircle, StopCircle, Image as ImageIcon } from 'lucide-react';
 import { Ticket, TicketStatus, PriorityLevel } from './TicketCard';
 
 interface TicketDetailModalProps {
@@ -20,6 +21,8 @@ export function TicketDetailModal({
   onStatusChange,
   onDelete 
 }: TicketDetailModalProps) {
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
   if (!isOpen || !ticket) return null;
   
   const isOwner = currentUserEmail === ticket.user_email;
@@ -49,13 +52,8 @@ export function TicketDetailModal({
 
   const formatDate = (isoString: string) => {
     try {
-      return new Date(isoString).toLocaleString('zh-TW', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      // 使用本地時間格式 YYYY-MM-DD
+      return new Date(isoString).toLocaleDateString('en-CA');
     } catch {
       return isoString;
     }
@@ -71,22 +69,22 @@ export function TicketDetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-white border-b border-[#E2E8F0] px-6 py-5 rounded-t-2xl">
+        <div className="bg-white px-8 pt-8 pb-4 rounded-t-2xl">
           <div className="flex items-start justify-between gap-6">
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span className={`px-3 py-1 rounded-full text-xs border ${getStatusStyle(ticket.status)}`}>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusStyle(ticket.status)}`}>
                   {ticket.status}
                 </span>
-                <span className={`px-3 py-1 rounded-full text-xs border ${getPriorityStyle(ticket.priority)}`}>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityStyle(ticket.priority)}`}>
                   {ticket.priority} Priority
                 </span>
               </div>
-              <h2 className="text-[#1E293B]">{ticket.title}</h2>
+              <h2 className="text-2xl font-bold text-[#1E293B]">{ticket.title}</h2>
             </div>
             <button
               onClick={onClose}
-              className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[#F1F5F9] transition-colors shrink-0"
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#F1F5F9] transition-colors shrink-0"
               aria-label="Close"
             >
               <X className="w-5 h-5 text-[#64748B]" />
@@ -95,7 +93,7 @@ export function TicketDetailModal({
         </div>
 
         {/* Content */}
-        <div className="px-6 py-5 space-y-6">
+        <div className="px-8 pb-8 space-y-8">
           
           {/* --- Admin / Owner Operations --- */}
           {(isAdmin || canDelete) && (
@@ -153,53 +151,78 @@ export function TicketDetailModal({
 
           {/* Metadata Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-start gap-3 p-4 bg-[#F8FAFC] rounded-xl">
-              <div className="w-11 h-11 bg-[#DBEAFE] rounded-lg flex items-center justify-center shrink-0">
-                <Calendar className="w-5 h-5 text-[#2563EB]" />
+            <div className="flex items-center gap-4 p-4 bg-[#F8FAFC] rounded-xl border border-[#F1F5F9]">
+              <div className="w-10 h-10 bg-[#DBEAFE] rounded-lg flex items-center justify-center shrink-0 text-[#2563EB]">
+                <Calendar className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs text-[#64748B] mb-1">Created Date</div>
-                <div className="text-sm text-[#1E293B]">{formatDate(ticket.created_at)}</div>
+                <div className="text-xs text-[#64748B] mb-0.5">Created Date</div>
+                <div className="text-sm font-medium text-[#1E293B]">{formatDate(ticket.created_at)}</div>
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-4 bg-[#F8FAFC] rounded-xl">
-              <div className="w-11 h-11 bg-[#FEF3C7] rounded-lg flex items-center justify-center shrink-0">
-                <AlertCircle className="w-5 h-5 text-[#F59E0B]" />
+            <div className="flex items-center gap-4 p-4 bg-[#F8FAFC] rounded-xl border border-[#F1F5F9]">
+              <div className="w-10 h-10 bg-[#FEF3C7] rounded-lg flex items-center justify-center shrink-0 text-[#F59E0B]">
+                <AlertCircle className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs text-[#64748B] mb-1">Priority</div>
-                <div className="text-sm text-[#1E293B]">{ticket.priority}</div>
+                <div className="text-xs text-[#64748B] mb-0.5">Urgency</div>
+                <div className="text-sm font-medium text-[#1E293B]">{ticket.priority}</div>
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-4 bg-[#F8FAFC] rounded-xl md:col-span-3 lg:col-span-1">
-              <div className="w-11 h-11 bg-[#E0E7FF] rounded-lg flex items-center justify-center shrink-0">
-                <User className="w-5 h-5 text-[#4F46E5]" />
+            <div className="flex items-center gap-4 p-4 bg-[#F8FAFC] rounded-xl border border-[#F1F5F9]">
+              <div className="w-10 h-10 bg-[#E0E7FF] rounded-lg flex items-center justify-center shrink-0 text-[#4F46E5]">
+                <User className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs text-[#64748B] mb-1">Created By</div>
-                <div className="text-sm font-medium text-[#1E293B]">
-                  {ticket.user_name || ticket.user_email?.split('@')[0] || 'Unknown User'}
+                <div className="text-xs text-[#64748B] mb-0.5">Created By</div>
+                <div className="text-sm font-medium text-[#1E293B] truncate">
+                  {ticket.user_name || ticket.user_email?.split('@')[0] || 'Unknown'}
                 </div>
-                {ticket.user_name && ticket.user_email && (
-                  <div className="text-xs text-[#64748B] mt-0.5">{ticket.user_email}</div>
-                )}
               </div>
             </div>
           </div>
 
           {/* Description */}
-          <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
-            <div className="bg-[#F8FAFC] px-5 py-3 border-b border-[#E2E8F0]">
-              <h3 className="text-sm font-semibold text-[#475569]">Description</h3>
-            </div>
-            <div className="p-5">
-              <p className="text-sm text-[#334155] leading-relaxed whitespace-pre-wrap">
+          <div>
+            <h3 className="text-lg font-semibold text-[#1E293B] mb-3">Description</h3>
+            <div className="bg-[#F8FAFC] p-6 rounded-xl border border-[#F1F5F9]">
+              <p className="text-[#334155] leading-relaxed whitespace-pre-wrap">
                 {ticket.description || 'No description provided.'}
               </p>
             </div>
           </div>
+
+          {/* Images */}
+          {ticket.images && ticket.images.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-[#1E293B] mb-3 flex items-center gap-2">
+                <ImageIcon className="w-5 h-5" />
+                Attached Images ({ticket.images.length})
+              </h3>
+              <div className="grid grid-cols-1 gap-4">
+                {ticket.images.map((image, index) => (
+                  <div 
+                    key={index} 
+                    className="relative rounded-xl overflow-hidden border border-[#E2E8F0] bg-black group cursor-pointer"
+                    onClick={() => setSelectedImage(image)}
+                  >
+                    <img 
+                      src={image} 
+                      alt={`Attachment ${index + 1}`} 
+                      className="w-full h-auto max-h-[400px] object-contain mx-auto transition-opacity group-hover:opacity-90"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+                      <span className="bg-white text-[#2563EB] px-4 py-2 rounded-full text-sm font-medium shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform">
+                        Click to view full size
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Ticket ID */}
           <div className="pt-4 border-t border-[#E2E8F0]">
@@ -208,15 +231,36 @@ export function TicketDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="bg-[#F8FAFC] border-t border-[#E2E8F0] px-6 py-5 rounded-b-2xl">
+        <div className="p-6 border-t border-[#E2E8F0]">
           <button
             onClick={onClose}
-            className="w-full px-6 py-3 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl transition-all shadow-sm hover:shadow-md"
+            className="w-full py-3.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-medium rounded-xl transition-all shadow-sm hover:shadow-md"
           >
             Close
           </button>
         </div>
       </div>
+
+      {/* Lightbox Overlay */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedImage(null)}
+        >
+          <button 
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+            onClick={() => setSelectedImage(null)}
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img 
+            src={selectedImage} 
+            alt="Full size preview" 
+            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

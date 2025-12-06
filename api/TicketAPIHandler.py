@@ -10,11 +10,13 @@ from botocore.exceptions import ClientError
 # --- 設定區 ---
 SQS_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/463414760499/TicketQueue' # <--- 貼上你的 SQS URL
 TABLE_NAME = 'TicketTable'
+S3_BUCKET_NAME = 'repair-work-order-system' # <--- 請替換成您的 S3 Bucket 名稱
 # -----------------------------------
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(TABLE_NAME)
 sqs = boto3.client('sqs')
+s3 = boto3.client('s3')
 
 # 處理 DynamoDB Decimal 轉 JSON 的輔助類別
 class DecimalEncoder(json.JSONEncoder):
@@ -166,6 +168,50 @@ def lambda_handler(event, context):
                     })
                 }
 
+            # === 取得 S3 上傳 URL (Get Upload URL) ===
+            elif action == 'get_upload_url':
+                file_name = body.get('file_name')
+                file_type = body.get('file_type')
+                
+                if not file_name or not file_type:
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Missing file_name or file_type'})}
+                
+                # 產生唯一的檔案名稱 (避免覆蓋)
+                # 格式: tickets/{uuid}/{timestamp}_{filename}
+                unique_id = str(uuid.uuid4())
+                timestamp = int(datetime.now().timestamp())
+                object_key = f"tickets/{unique_id}/{timestamp}_{file_name}"
+                
+                try:
+                    # 產生 Pre-signed URL
+                    presigned_url = s3.generate_presigned_url(
+                        'put_object',
+                        Params={
+                            'Bucket': S3_BUCKET_NAME,
+                            'Key': object_key,
+                            'ContentType': file_type
+                        },
+                        ExpiresIn=300 # URL 有效期 5 分鐘
+                    )
+                    
+                    # 回傳上傳 URL 和最終的圖片 URL
+                    # 注意：如果 Bucket 不是公開的，讀取時也需要 Pre-signed URL (這裡假設是公開讀取或透過 CloudFront)
+                    # 或是之後讀取時再動態產生 GetObject 的 Pre-signed URL
+                    image_url = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{object_key}"
+                    
+                    return {
+                        'statusCode': 200,
+                        'headers': headers,
+                        'body': json.dumps({
+                            'upload_url': presigned_url,
+                            'image_url': image_url,
+                            'key': object_key
+                        })
+                    }
+                except Exception as e:
+                    print(f"S3 Presign Error: {e}")
+                    return {'statusCode': 500, 'headers': headers, 'body': json.dumps({'error': 'Failed to generate upload URL'})}
+
             # === 建立工單 (Create Ticket) ===
             # 預設行為 (無 action 或 action='create_ticket')
             ticket_id = str(uuid.uuid4())
@@ -180,6 +226,7 @@ def lambda_handler(event, context):
                 'created_at': timestamp,
                 'user_email': body.get('user_email', ''), # 用來通知
                 'user_name': body.get('user_name', ''), # 顯示用
+                'images': body.get('images', []), # 儲存圖片 Base64
                 'type': 'ticket' # 標記為工單
             }
             

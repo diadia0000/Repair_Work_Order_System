@@ -149,15 +149,44 @@ function App() {
     }
   };
 
-  const handleCreateTicket = async (newTicket: { title: string; description: string; priority: string }) => {
+  const handleCreateTicket = async (newTicket: { title: string; description: string; priority: string; images?: File[] }) => {
     try {
       setError(null);
       console.log('Creating ticket:', newTicket);
+      
+      let imageUrls: string[] = [];
+      if (newTicket.images && newTicket.images.length > 0) {
+        console.log('Images to upload:', newTicket.images);
+        
+        // Upload images to S3
+        const uploadPromises = newTicket.images.map(async (file) => {
+          // 1. Get Pre-signed URL
+          const response = await ticketService.getUploadUrl(file.name, file.type);
+          console.log('[App] S3 Upload Info:', response); // Debug log
+
+          const { upload_url, image_url } = response;
+          
+          if (!upload_url) {
+            throw new Error('Failed to get upload URL from backend');
+          }
+
+          // 2. Upload to S3
+          console.log(`[App] Uploading ${file.name} to ${upload_url}`);
+          await ticketService.uploadToS3(upload_url, file);
+          
+          return image_url;
+        });
+
+        imageUrls = await Promise.all(uploadPromises);
+      }
+
       const result = await ticketService.createTicket({
-        ...newTicket,
+        title: newTicket.title,
+        description: newTicket.description,
         priority: newTicket.priority as PriorityLevel,
         user_email: userEmail,
         user_name: userName,
+        images: imageUrls,
       });
       
       console.log('Ticket created successfully:', result);
