@@ -3,9 +3,10 @@ import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
 interface LoginPageProps {
   onLogin: (email: string, password: string) => void;
+  onSwitchToRegister: () => void;
 }
 
-export function LoginPage({ onLogin }: LoginPageProps) {
+export function LoginPage({ onLogin, onSwitchToRegister }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -105,7 +106,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* Footer */}
           <div className="mt-6 pt-6 border-t border-[#E2E8F0] text-center">
-            <small className="text-[#64748B]">
+            <p className="text-[#64748B] mb-2">
+              Don't have an account?{' '}
+              <button 
+                onClick={onSwitchToRegister}
+                className="text-[#2563EB] hover:text-[#1D4ED8] font-medium transition-colors"
+              >
+                Register
+              </button>
+            </p>
+            <small className="text-[#94A3B8]">
               Need help? Contact your lab administrator
             </small>
           </div>

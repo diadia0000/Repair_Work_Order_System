@@ -5,7 +5,9 @@ export type PriorityLevel = 'Low' | 'Medium' | 'High';
 
 export interface Ticket {
   ticket_id: string;
-  user_id: string;
+  user_id?: string;
+  user_email?: string;
+  user_name?: string;
   title: string;
   description: string;
   status: TicketStatus;
@@ -43,12 +45,18 @@ export function TicketCard({ ticket, onClick }: TicketCardProps) {
 
   // 格式化 ISO 8601 時間為顯示用格式
   const formatDate = (isoString: string) => {
-    const date = new Date(isoString);
-    return date.toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleString('zh-TW', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return isoString;
+    }
   };
 
   return (
@@ -83,7 +91,7 @@ export function TicketCard({ ticket, onClick }: TicketCardProps) {
 
       {/* User ID */}
       <div className="mt-3 pt-3 border-t border-[#E2E8F0]">
-        <small className="text-[#94A3B8]">By {ticket.user_id}</small>
+        <small className="text-[#94A3B8]">By {ticket.user_name || ticket.user_email?.split('@')[0] || 'Unknown'}</small>
       </div>
     </div>
   );

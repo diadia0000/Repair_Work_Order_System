@@ -2,10 +2,12 @@ import json
 import boto3
 import uuid
 import decimal
+import hashlib
+import base64
 from datetime import datetime
 from botocore.exceptions import ClientError
 
-# --- 設定區 (請換成你剛剛建立的數值) ---
+# --- 設定區 ---
 SQS_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/463414760499/TicketQueue' # <--- 貼上你的 SQS URL
 TABLE_NAME = 'TicketTable'
 # -----------------------------------
@@ -21,13 +23,39 @@ class DecimalEncoder(json.JSONEncoder):
             return float(o)
         return super(DecimalEncoder, self).default(o)
 
+def get_user_claims(headers):
+    """
+    從 Authorization Header 解析 JWT Token (簡單解碼)
+    注意：在生產環境中，應該驗證簽章 (Signature)
+    """
+    auth = headers.get('Authorization') or headers.get('authorization')
+    if not auth:
+        return {}
+    
+    try:
+        # Token 格式通常是 "Bearer <token>" 或直接 "<token>"
+        token = auth.replace('Bearer ', '')
+        # JWT 是 header.payload.signature
+        parts = token.split('.')
+        if len(parts) < 2:
+            return {}
+            
+        payload_part = parts[1]
+        # Base64 padding
+        payload_part += '=' * (-len(payload_part) % 4)
+        claims = json.loads(base64.b64decode(payload_part))
+        return claims
+    except Exception as e:
+        print(f"Token decode error: {e}")
+        return {}
+
 def lambda_handler(event, context):
     print("Received event:", json.dumps(event)) # Debug 用
     
     # 1. 處理 CORS (讓 React 可以呼叫)
     headers = {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE, PATCH",
         "Access-Control-Allow-Headers": "Content-Type, Authorization"
     }
     
@@ -38,10 +66,108 @@ def lambda_handler(event, context):
     method = event.get('httpMethod')
     path = event.get('path')
     
+    # 解析使用者身分
+    user_claims = get_user_claims(event.get('headers', {}))
+    user_email = user_claims.get('email')
+    # 注意：cognito:groups 可能是 list 或 string，視 token 內容而定
+    raw_groups = user_claims.get('cognito:groups', [])
+    if isinstance(raw_groups, str):
+        user_groups = [raw_groups]
+    else:
+        user_groups = raw_groups
+        
+    is_admin = 'Admin' in user_groups
+    
+    print(f"User: {user_email}, Groups: {user_groups}, IsAdmin: {is_admin}")
+
     try:
         # --- Create (POST) ---
         if method == 'POST':
             body = json.loads(event.get('body', '{}'))
+            action = body.get('action')
+
+            # === 註冊 (Register) ===
+            if action == 'register':
+                email = body.get('email')
+                password = body.get('password')
+                name = body.get('name', 'User')
+                
+                if not email or not password:
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Missing email or password'})}
+                
+                # 密碼強度檢查 (後端雙重驗證)
+                if len(password) < 8:
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Password too short'})}
+
+                user_id = f"USER#{email}"
+                
+                # 檢查是否已存在
+                existing = table.get_item(Key={'ticket_id': user_id})
+                if 'Item' in existing:
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'User already exists'})}
+                
+                # 密碼雜湊 (Hash)
+                # 使用 SHA-256 + Email 作為簡易 Salt
+                salt = email.lower()
+                hashed_password = hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
+
+                item = {
+                    'ticket_id': user_id,
+                    'user_email': email, # 統一欄位名稱
+                    'password': hashed_password, # 儲存雜湊後的密碼
+                    'user_name': name, # 統一欄位名稱
+                    'type': 'user',
+                    'created_at': datetime.now().isoformat()
+                }
+                table.put_item(Item=item)
+                return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'message': 'User registered successfully'})}
+
+            # === 登入 (Login) ===
+            elif action == 'login':
+                email = body.get('email')
+                password = body.get('password')
+                
+                user_id = f"USER#{email}"
+                response = table.get_item(Key={'ticket_id': user_id})
+                
+                if 'Item' not in response:
+                    return {'statusCode': 401, 'headers': headers, 'body': json.dumps({'error': 'User not found'})}
+                
+                user = response['Item']
+                
+                # 驗證密碼
+                salt = email.lower()
+                hashed_input = hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
+                
+                # 相容性檢查：如果舊密碼是明文 (長度通常較短，SHA256 是 64 字元)，則直接比對
+                # 注意：這只是過渡期邏輯，建議清空舊資料
+                stored_password = user.get('password')
+                
+                if len(stored_password) < 64: # 假設舊密碼是明文
+                     if stored_password != password:
+                        return {'statusCode': 401, 'headers': headers, 'body': json.dumps({'error': 'Invalid password'})}
+                else:
+                    if stored_password != hashed_input:
+                        return {'statusCode': 401, 'headers': headers, 'body': json.dumps({'error': 'Invalid password'})}
+                
+                # 取得使用者資料 (相容舊資料 email/name 與新資料 user_email/user_name)
+                return_email = user.get('user_email', user.get('email'))
+                return_name = user.get('user_name', user.get('name'))
+
+                return {
+                    'statusCode': 200, 
+                    'headers': headers, 
+                    'body': json.dumps({
+                        'message': 'Login successful',
+                        'user': {
+                            'email': return_email,
+                            'name': return_name
+                        }
+                    })
+                }
+
+            # === 建立工單 (Create Ticket) ===
+            # 預設行為 (無 action 或 action='create_ticket')
             ticket_id = str(uuid.uuid4())
             timestamp = datetime.now().isoformat()
             
@@ -52,7 +178,9 @@ def lambda_handler(event, context):
                 'priority': body.get('priority', 'Low'),
                 'status': 'Open',
                 'created_at': timestamp,
-                'user_email': body.get('user_email', '') # 用來通知
+                'user_email': body.get('user_email', ''), # 用來通知
+                'user_name': body.get('user_name', ''), # 顯示用
+                'type': 'ticket' # 標記為工單
             }
             
             # 寫入 DynamoDB
@@ -66,10 +194,13 @@ def lambda_handler(event, context):
                     'email': item['user_email'],
                     'type': 'TICKET_CREATED'
                 }
-                sqs.send_message(
-                    QueueUrl=SQS_QUEUE_URL,
-                    MessageBody=json.dumps(msg_body)
-                )
+                try:
+                    sqs.send_message(
+                        QueueUrl=SQS_QUEUE_URL,
+                        MessageBody=json.dumps(msg_body)
+                    )
+                except Exception as e:
+                    print(f"SQS Error: {e}")
             
             return {
                 'statusCode': 200,
@@ -81,23 +212,84 @@ def lambda_handler(event, context):
         elif method == 'GET':
             # 這裡簡化直接 Scan (正式環境通常不建議，但作業可接受)
             response = table.scan()
-            items = response.get('Items', [])
+            all_items = response.get('Items', [])
+            
+            # 過濾掉使用者資料 (只回傳工單)
+            # 判斷標準：ticket_id 不以 USER# 開頭，或者 type == 'ticket' (舊資料可能沒 type，所以用 USER# 判斷較準)
+            items = [i for i in all_items if not i.get('ticket_id', '').startswith('USER#')]
+            
+            # 標準化回應格式
             return {
                 'statusCode': 200,
                 'headers': headers,
-                'body': json.dumps(items, cls=DecimalEncoder)
+                'body': json.dumps({
+                    'count': len(items),
+                    'items': items
+                }, cls=DecimalEncoder)
             }
             
+        # --- Update (PUT/PATCH) ---
+        elif method == 'PUT' or method == 'PATCH':
+            # 權限檢查：只有 Admin 可以修改狀態
+            if not is_admin:
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Permission denied: Only Admin can update status'})}
+
+            # 假設路徑是 /tickets/123，但 API Gateway 可能沒設好 Proxy
+            # 我們支援從 Body 讀取 ticket_id
+            body = json.loads(event.get('body', '{}'))
+            
+            # 嘗試從 pathParameters 獲取 ticket_id (如果 API Gateway 有設定 {id})
+            path_params = event.get('pathParameters')
+            ticket_id = path_params.get('id') if path_params else body.get('ticket_id')
+            
+            if not ticket_id:
+                return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Missing ticket_id'})}
+
+            # 更新欄位 (目前只支援 status)
+            new_status = body.get('status')
+            if new_status:
+                table.update_item(
+                    Key={'ticket_id': ticket_id},
+                    UpdateExpression="set #s = :s",
+                    ExpressionAttributeNames={'#s': 'status'},
+                    ExpressionAttributeValues={':s': new_status},
+                    ReturnValues="UPDATED_NEW"
+                )
+                return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'message': 'Updated', 'status': new_status})}
+            else:
+                return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'No fields to update'})}
+
         # --- Delete (DELETE) ---
         # 假設路徑是 /tickets/123，但 API Gateway 可能沒設好 Proxy，
         # 我們先假設 ticket_id 放在 QueryString 或 Body 傳進來比較保險
         elif method == 'DELETE':
             body = json.loads(event.get('body', '{}'))
-            ticket_id = body.get('ticket_id')
+            
+            # 嘗試從 pathParameters 獲取 ticket_id
+            path_params = event.get('pathParameters')
+            ticket_id = path_params.get('id') if path_params else body.get('ticket_id')
             
             if ticket_id:
-                table.delete_item(Key={'ticket_id': ticket_id})
-                return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'message': 'Deleted'})}
+                # 權限檢查：Admin 或 Owner 才能刪除
+                # 先讀取工單確認 Owner
+                try:
+                    response = table.get_item(Key={'ticket_id': ticket_id})
+                    item = response.get('Item')
+                    
+                    if not item:
+                        return {'statusCode': 404, 'headers': headers, 'body': json.dumps({'error': 'Ticket not found'})}
+                    
+                    owner_email = item.get('user_email')
+                    is_owner = user_email and (user_email == owner_email)
+                    
+                    if not (is_admin or is_owner):
+                        return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Permission denied: Only Admin or Owner can delete'})}
+                        
+                    table.delete_item(Key={'ticket_id': ticket_id})
+                    return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'message': 'Deleted'})}
+                except Exception as e:
+                    print(f"Delete check error: {e}")
+                    return {'statusCode': 500, 'headers': headers, 'body': json.dumps({'error': 'Internal Server Error'})}
             else:
                 return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Missing ticket_id'})}
 

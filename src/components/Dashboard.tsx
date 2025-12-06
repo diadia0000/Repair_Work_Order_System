@@ -2,17 +2,21 @@ import { useState } from 'react';
 import { Plus, LogOut, User, Filter } from 'lucide-react';
 import { TicketCard, Ticket, TicketStatus } from './TicketCard';
 import { CreateTicketModal } from './CreateTicketModal';
+import { TicketDetailModal } from './TicketDetailModal';
 
 interface DashboardProps {
   tickets: Ticket[];
   onCreateTicket: (ticket: { title: string; description: string; priority: string }) => void;
   onUpdateTicketStatus: (ticketId: string, newStatus: TicketStatus) => void;
+  onDeleteTicket: (ticketId: string) => void;
   onLogout: () => void;
   userEmail: string;
+  isAdmin?: boolean;
 }
 
-export function Dashboard({ tickets, onCreateTicket, onUpdateTicketStatus: _onUpdateTicketStatus, onLogout, userEmail }: DashboardProps) {
+export function Dashboard({ tickets, onCreateTicket, onUpdateTicketStatus, onDeleteTicket, onLogout, userEmail, isAdmin = false }: DashboardProps) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [filterStatus, setFilterStatus] = useState<TicketStatus | 'All'>('All');
 
   const filteredTickets = filterStatus === 'All' 
@@ -151,7 +155,11 @@ export function Dashboard({ tickets, onCreateTicket, onUpdateTicketStatus: _onUp
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredTickets.map((ticket) => (
-              <TicketCard key={ticket.ticket_id} ticket={ticket} />
+              <TicketCard 
+                key={ticket.ticket_id} 
+                ticket={ticket} 
+                onClick={() => setSelectedTicket(ticket)}
+              />
             ))}
           </div>
         )}
@@ -162,6 +170,17 @@ export function Dashboard({ tickets, onCreateTicket, onUpdateTicketStatus: _onUp
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={onCreateTicket}
+      />
+
+      {/* Ticket Detail Modal */}
+      <TicketDetailModal
+        isOpen={!!selectedTicket}
+        onClose={() => setSelectedTicket(null)}
+        ticket={selectedTicket}
+        currentUserEmail={userEmail}
+        isAdmin={isAdmin}
+        onStatusChange={onUpdateTicketStatus}
+        onDelete={onDeleteTicket}
       />
     </div>
   );
