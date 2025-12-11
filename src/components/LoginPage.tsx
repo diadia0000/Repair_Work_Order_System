@@ -88,12 +88,6 @@ export function LoginPage({ onLogin, onSwitchToRegister }: LoginPageProps) {
               </div>
             </div>
 
-            {/* Forgot Password Link */}
-            <div className="text-right">
-              <a href="#" className="text-[#2563EB] hover:text-[#1D4ED8] transition-colors whitespace-nowrap">
-                Forgot Password?
-              </a>
-            </div>
 
             {/* Sign In Button */}
             <button
