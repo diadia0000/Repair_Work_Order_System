@@ -14,6 +14,7 @@
 App (主應用)
 ├── LoginPage (登入頁)
 ├── RegisterPage (註冊頁)
+├── ConfirmSignUpPage (Email 驗證頁)
 ├── NewPasswordPage (重設密碼)
 └── Dashboard (主控台)
     ├── Navigation (導覽列)
@@ -32,37 +33,64 @@ App (主應用)
 ### 1. 登入頁面 (LoginPage)
 
 **畫面元素**:
-- Logo 與應用名稱
-- Email 輸入框
-- 密碼輸入框 (可切換顯示/隱藏)
-- 登入按鈕
-- 註冊連結
+- Logo 與應用名稱 (Lab Service Portal)
+- Email 輸入框 (帶 Mail 圖示)
+- 密碼輸入框 (可切換顯示/隱藏，帶 Lock 圖示)
+- Sign In 按鈕
+- 註冊連結 (Register)
 
 **功能**:
 - 表單驗證 (Email 格式、必填檢查)
 - Enter 鍵送出
 - 整合 AWS Cognito 認證
+- 支援 NEW_PASSWORD_REQUIRED 挑戰流程
 
 ---
 
 ### 2. 註冊頁面 (RegisterPage)
 
 **畫面元素**:
-- 姓名輸入框
-- Email 輸入框
-- 密碼輸入框
-- 註冊按鈕
-- 返回登入連結
+- Logo 與標題 (Create Account)
+- Full Name 輸入框 (帶 User 圖示)
+- Email 輸入框 (帶 Mail 圖示)
+- Password 輸入框 (可切換顯示/隱藏，帶 Lock 圖示)
+- Confirm Password 輸入框
+- Create Account 按鈕 (顯示 Loading 狀態)
+- 返回登入連結 (Sign In)
 
-**密碼規則**:
+**密碼規則** (前端即時驗證):
 - 至少 8 字元
-- 需包含大小寫字母
-- 需包含數字
-- 需包含特殊符號
+- 需包含大寫字母 (A-Z)
+- 需包含小寫字母 (a-z)
+- 需包含數字 (0-9)
+- 需包含特殊符號 (!@#$%^&* 等)
+
+**錯誤訊息顯示**:
+- 密碼規則不符合時，顯示紅色錯誤框
+- 兩次密碼不一致時，顯示 "Passwords do not match"
+- 成功後自動跳轉至驗證碼頁面
 
 ---
 
-### 3. 主控台 (Dashboard)
+### 3. Email 驗證頁面 (ConfirmSignUpPage)
+
+**畫面元素**:
+- Logo 與標題 (Verify Your Email)
+- 顯示寄送驗證碼的 Email 地址
+- 6 位數驗證碼輸入框 (僅允許數字，置中大字)
+- Verify Email 按鈕 (驗證碼未滿 6 位時禁用)
+- Resend 連結 (重新發送驗證碼)
+- Back to login 返回連結
+
+**功能**:
+- 自動過濾非數字字元
+- 限制輸入最多 6 位
+- 重新發送後顯示綠色成功訊息
+- 驗證成功後自動跳轉至登入頁面
+
+---
+
+### 4. 主控台 (Dashboard)
 
 #### Navigation Bar
 ```
@@ -93,7 +121,7 @@ App (主應用)
 
 ---
 
-### 4. 工單卡片 (TicketCard)
+### 5. 工單卡片 (TicketCard)
 
 ```
 ┌───────────────────────────────┐
@@ -122,7 +150,7 @@ App (主應用)
 
 ---
 
-### 5. 建立工單彈窗 (CreateTicketModal)
+### 6. 建立工單彈窗 (CreateTicketModal)
 
 **表單欄位**:
 1. **Issue Title** (必填): 工單標題
@@ -142,7 +170,7 @@ App (主應用)
 
 ---
 
-### 6. 工單詳情彈窗 (TicketDetailModal)
+### 7. 工單詳情彈窗 (TicketDetailModal)
 
 **顯示內容**:
 - 工單標題與狀態
@@ -209,25 +237,28 @@ xl:  1280px  (大螢幕)
 ### App.tsx 主要狀態
 ```typescript
 isLoggedIn: boolean          // 登入狀態
+view: 'login' | 'register' | 'dashboard' | 'new-password' | 'confirm-signup'  // 當前頁面
 userEmail: string            // 使用者 Email
 userName: string             // 使用者姓名
 isAdmin: boolean             // 管理員權限
 tickets: Ticket[]            // 工單列表
 isLoading: boolean           // 載入狀態
 error: string | null         // 錯誤訊息
+pendingEmail: string         // 待驗證的 Email (註冊流程)
 ```
 
 ### Ticket 資料結構
 ```typescript
 interface Ticket {
   ticket_id: string;
+  user_id?: string;
+  user_email?: string;
+  user_name?: string;
   title: string;
   description: string;
   status: 'Open' | 'Processing' | 'Closed';
   priority: 'Low' | 'Medium' | 'High';
   created_at: string;
-  user_email: string;
-  user_name: string;
   images?: string[];
 }
 ```
@@ -331,11 +362,19 @@ LogOut:       登出
 User:         使用者
 Filter:       篩選
 Clock:        時間
-AlertCircle:  警告
+AlertCircle:  警告/優先級
 Eye/EyeOff:   顯示/隱藏密碼
 X:            關閉
 Upload:       上傳
 Trash2:       刪除
+Mail:         Email
+Lock:         密碼鎖
+KeyRound:     驗證碼
+Calendar:     日期
+Image:        圖片附件
+CheckCircle:  完成狀態
+PlayCircle:   處理中狀態
+StopCircle:   開放狀態
 ```
 
 ---
@@ -345,21 +384,27 @@ Trash2:       刪除
 ### 專案結構
 ```
 src/
-├── App.tsx                    主應用
+├── App.tsx                      主應用
+├── main.tsx                     入口檔案
+├── index.html                   HTML 模板
 ├── components/
-│   ├── LoginPage.tsx          登入頁
-│   ├── RegisterPage.tsx       註冊頁
-│   ├── Dashboard.tsx          主控台
-│   ├── TicketCard.tsx         工單卡片
-│   ├── CreateTicketModal.tsx  建立彈窗
-│   └── TicketDetailModal.tsx  詳情彈窗
+│   ├── LoginPage.tsx            登入頁
+│   ├── RegisterPage.tsx         註冊頁
+│   ├── ConfirmSignUpPage.tsx    Email 驗證頁
+│   ├── NewPasswordPage.tsx      重設密碼頁
+│   ├── Dashboard.tsx            主控台
+│   ├── TicketCard.tsx           工單卡片
+│   ├── CreateTicketModal.tsx    建立彈窗
+│   ├── TicketDetailModal.tsx    詳情彈窗
+│   ├── figma/                   Figma 匯入元件
+│   └── ui/                      UI 元件庫 (shadcn/ui)
 ├── services/
-│   └── ticketService.ts       API 服務
+│   └── ticketService.ts         API 服務
 ├── config/
-│   ├── api.ts                 API 配置
-│   └── aws-config.ts          AWS Cognito 配置
+│   ├── api.ts                   API 配置
+│   └── aws-config.ts            AWS Cognito 配置
 └── styles/
-    └── globals.css            全域樣式
+    └── globals.css              全域樣式
 ```
 
 ### 環境變數
