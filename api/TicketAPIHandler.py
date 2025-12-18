@@ -9,9 +9,9 @@ from datetime import datetime
 from botocore.exceptions import ClientError
 import os
 # --- 設定區 ---
-SQS_QUEUE_URL = os.environ.get('SQS_QUEUE_URL')
-TABLE_NAME = os.environ.get('TABLE_NAME', 'TicketTable')
-S3_BUCKET_NAME = os.environ.get('S3_BUCKET_NAME')
+SQS_QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/463414760499/TicketQueue' # <--- 貼上你的 SQS URL
+TABLE_NAME = 'TicketTable'
+S3_BUCKET_NAME = 'repair-work-order-system' # <--- 請替換成您的 S3 Bucket 名稱
 # -----------------------------------
 
 dynamodb = boto3.resource('dynamodb')
