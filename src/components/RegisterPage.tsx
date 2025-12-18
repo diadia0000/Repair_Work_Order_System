@@ -18,7 +18,10 @@ export function RegisterPage({ onRegister, onSwitchToLogin }: RegisterPageProps)
 
   const validatePassword = (pwd: string) => {
     if (pwd.length < 8) return 'Password must be at least 8 characters long';
-    if (!/[A-Za-z]/.test(pwd) || !/[0-9]/.test(pwd)) return 'Password must contain both letters and numbers';
+    if (!/[A-Z]/.test(pwd)) return 'Password must contain at least one uppercase letter';
+    if (!/[a-z]/.test(pwd)) return 'Password must contain at least one lowercase letter';
+    if (!/[0-9]/.test(pwd)) return 'Password must contain at least one number';
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pwd)) return 'Password must contain at least one symbol (!@#$%^&* etc.)';
     return null;
   };
 
@@ -41,10 +44,8 @@ export function RegisterPage({ onRegister, onSwitchToLogin }: RegisterPageProps)
     try {
       setIsLoading(true);
       await onRegister(email, password, name);
-      setSuccess('Registration successful! Redirecting to login...');
-      setTimeout(() => {
-        onSwitchToLogin();
-      }, 2000);
+      // 註冊成功後，App.tsx 會自動切換到驗證碼頁面
+      // 不需要在這裡處理跳轉
     } catch (err) {
       // Error is handled by parent or we can set it here if onRegister throws
       // But usually parent handles alert, we want to avoid alert.
@@ -164,7 +165,7 @@ export function RegisterPage({ onRegister, onSwitchToLogin }: RegisterPageProps)
                 </button>
               </div>
               <p className="mt-1 text-xs text-[#64748B]">
-                Must be at least 8 characters with letters and numbers
+                Must be at least 8 characters with uppercase, lowercase, numbers and symbols
               </p>
             </div>
 

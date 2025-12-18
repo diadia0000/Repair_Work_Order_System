@@ -4,6 +4,7 @@ import uuid
 import decimal
 import hashlib
 import base64
+import re
 from datetime import datetime
 from botocore.exceptions import ClientError
 import os
@@ -98,8 +99,21 @@ def lambda_handler(event, context):
                     return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Missing email or password'})}
                 
                 # 密碼強度檢查 (後端雙重驗證)
+                # 必須包含：至少8字元、大寫字母、小寫字母、數字、特殊符號
                 if len(password) < 8:
-                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Password too short'})}
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Password must be at least 8 characters'})}
+
+                if not re.search(r'[A-Z]', password):
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Password must contain at least one uppercase letter'})}
+
+                if not re.search(r'[a-z]', password):
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Password must contain at least one lowercase letter'})}
+
+                if not re.search(r'[0-9]', password):
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Password must contain at least one number'})}
+
+                if not re.search(r'[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?`~]', password):
+                    return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Password must contain at least one symbol (!@#$%^&* etc.)'})}
 
                 user_id = f"USER#{email}"
                 

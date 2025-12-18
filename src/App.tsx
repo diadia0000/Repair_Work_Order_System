@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react';
-import { signIn, signUp, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes, confirmSignIn } from 'aws-amplify/auth';
+import { signIn, signUp, signOut, getCurrentUser, fetchAuthSession, fetchUserAttributes, confirmSignIn, confirmSignUp, resendSignUpCode } from 'aws-amplify/auth';
 import { LoginPage } from './components/LoginPage';
 import { RegisterPage } from './components/RegisterPage';
 import { NewPasswordPage } from './components/NewPasswordPage';
+import { ConfirmSignUpPage } from './components/ConfirmSignUpPage';
 import { Dashboard } from './components/Dashboard';
 import { Ticket, TicketStatus, PriorityLevel } from './components/TicketCard';
 import { ticketService } from './services/ticketService';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [view, setView] = useState<'login' | 'register' | 'dashboard' | 'new-password'>('login');
+  const [view, setView] = useState<'login' | 'register' | 'dashboard' | 'new-password' | 'confirm-signup'>('login');
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingEmail, setPendingEmail] = useState('');
 
   // Check auth state on load
   useEffect(() => {
@@ -117,7 +119,7 @@ function App() {
   const handleRegister = async (email: string, password: string, name: string) => {
     try {
       setError(null);
-      await signUp({
+      const { isSignUpComplete, nextStep } = await signUp({
         username: email,
         password,
         options: {
@@ -127,11 +129,36 @@ function App() {
           },
         },
       });
-      alert('Registration successful! Please check your email for verification code (if configured) or login.');
-      setView('login');
+
+      if (!isSignUpComplete && nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
+        // 需要驗證 email
+        setPendingEmail(email);
+        setView('confirm-signup');
+      }
+      // 如果 isSignUpComplete 為 true，RegisterPage 會顯示成功訊息
     } catch (err) {
       console.error('Registration failed:', err);
-      alert(`Registration failed: ${err instanceof Error ? err.message : String(err)}`);
+      // 拋出錯誤讓 RegisterPage 捕獲並顯示
+      throw new Error(err instanceof Error ? err.message : 'Registration failed');
+    }
+  };
+
+  const handleConfirmSignUp = async (code: string) => {
+    try {
+      await confirmSignUp({ username: pendingEmail, confirmationCode: code });
+      setView('login');
+    } catch (err) {
+      console.error('Confirmation failed:', err);
+      throw new Error(err instanceof Error ? err.message : 'Confirmation failed');
+    }
+  };
+
+  const handleResendCode = async () => {
+    try {
+      await resendSignUpCode({ username: pendingEmail });
+    } catch (err) {
+      console.error('Resend code failed:', err);
+      throw new Error(err instanceof Error ? err.message : 'Failed to resend code');
     }
   };
 
@@ -241,6 +268,16 @@ function App() {
     }
     if (view === 'new-password') {
       return <NewPasswordPage onSubmit={handleNewPasswordSubmit} />;
+    }
+    if (view === 'confirm-signup') {
+      return (
+        <ConfirmSignUpPage
+          email={pendingEmail}
+          onConfirm={handleConfirmSignUp}
+          onResendCode={handleResendCode}
+          onBack={() => setView('login')}
+        />
+      );
     }
     return <LoginPage onLogin={handleLogin} onSwitchToRegister={() => setView('register')} />;
   }
