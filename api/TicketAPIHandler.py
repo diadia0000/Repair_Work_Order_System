@@ -228,19 +228,30 @@ def lambda_handler(event, context):
 
             # === 建立工單 (Create Ticket) ===
             # 預設行為 (無 action 或 action='create_ticket')
+
+            # 取得並驗證 title
+            title = body.get('title', 'No Title')
+            if not title:
+                title = 'No Title'
+
+            # Title 字數限制 (最多 100 字元)
+            if len(title) > 100:
+                return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Title must be 100 characters or less'})}
+
             ticket_id = str(uuid.uuid4())
             timestamp = datetime.now().isoformat()
             
             item = {
                 'ticket_id': ticket_id,
-                'title': body.get('title', 'No Title'),
+                'title': title,
                 'description': body.get('description', ''),
                 'priority': body.get('priority', 'Low'),
                 'status': 'Open',
                 'created_at': timestamp,
                 'user_email': body.get('user_email', ''), # 用來通知
                 'user_name': body.get('user_name', ''), # 顯示用
-                'images': body.get('images', []), # 儲存圖片 Base64
+                'images': body.get('images', []), # 儲存圖片 URL
+                'tags': body.get('tags', []), # 分類標籤
                 'type': 'ticket' # 標記為工單
             }
             
@@ -291,10 +302,6 @@ def lambda_handler(event, context):
             
         # --- Update (PUT/PATCH) ---
         elif method == 'PUT' or method == 'PATCH':
-            # 權限檢查：只有 Admin 可以修改狀態
-            if not is_admin:
-                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Permission denied: Only Admin can update status'})}
-
             # 假設路徑是 /tickets/123，但 API Gateway 可能沒設好 Proxy
             # 我們支援從 Body 讀取 ticket_id
             body = json.loads(event.get('body', '{}'))
@@ -312,17 +319,89 @@ def lambda_handler(event, context):
             if not ticket_id:
                 return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Missing ticket_id'})}
 
-            # 更新欄位 (目前只支援 status)
+            # 取得現有的 ticket 資料以檢查權限
+            try:
+                response = table.get_item(Key={'ticket_id': ticket_id})
+                item = response.get('Item')
+
+                if not item:
+                    return {'statusCode': 404, 'headers': headers, 'body': json.dumps({'error': 'Ticket not found'})}
+
+                owner_email = item.get('user_email')
+                is_owner = user_email and (user_email == owner_email)
+            except Exception as e:
+                print(f"Get ticket error: {str(e)}")
+                return {'statusCode': 500, 'headers': headers, 'body': json.dumps({'error': f'Failed to get ticket: {str(e)}'})}
+
+            # 更新欄位
             new_status = body.get('status')
+            new_title = body.get('title')
+            new_description = body.get('description')
+            new_images = body.get('images')
+            new_priority = body.get('priority')
+            new_tags = body.get('tags')
+
+            # Title 字數限制 (最多 100 字元)
+            if new_title is not None and len(new_title) > 100:
+                return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Title must be 100 characters or less'})}
+
+            # Priority 驗證
+            if new_priority is not None and new_priority not in ['Low', 'Medium', 'High']:
+                return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'Invalid priority level'})}
+
+            # 權限檢查
+            # - 只有 Admin 可以修改 status
+            # - Admin 或 Owner 可以修改 title、description、images、priority、tags
+            if new_status and not is_admin:
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Permission denied: Only Admin can update status'})}
+
+            if (new_title is not None or new_description is not None or new_images is not None or new_priority is not None or new_tags is not None) and not (is_admin or is_owner):
+                return {'statusCode': 403, 'headers': headers, 'body': json.dumps({'error': 'Permission denied: Only Admin or Owner can edit ticket content'})}
+
+            # 構建更新表達式
+            update_expressions = []
+            expression_attribute_names = {}
+            expression_attribute_values = {}
+
             if new_status:
+                update_expressions.append('#s = :s')
+                expression_attribute_names['#s'] = 'status'
+                expression_attribute_values[':s'] = new_status
+
+            if new_title is not None:
+                update_expressions.append('#t = :t')
+                expression_attribute_names['#t'] = 'title'
+                expression_attribute_values[':t'] = new_title
+
+            if new_description is not None:
+                update_expressions.append('#d = :d')
+                expression_attribute_names['#d'] = 'description'
+                expression_attribute_values[':d'] = new_description
+
+            if new_images is not None:
+                update_expressions.append('#i = :i')
+                expression_attribute_names['#i'] = 'images'
+                expression_attribute_values[':i'] = new_images
+
+            if new_priority is not None:
+                update_expressions.append('#p = :p')
+                expression_attribute_names['#p'] = 'priority'
+                expression_attribute_values[':p'] = new_priority
+
+            if new_tags is not None:
+                update_expressions.append('#tags = :tags')
+                expression_attribute_names['#tags'] = 'tags'
+                expression_attribute_values[':tags'] = new_tags
+
+            if update_expressions:
                 table.update_item(
                     Key={'ticket_id': ticket_id},
-                    UpdateExpression="set #s = :s",
-                    ExpressionAttributeNames={'#s': 'status'},
-                    ExpressionAttributeValues={':s': new_status},
+                    UpdateExpression="set " + ", ".join(update_expressions),
+                    ExpressionAttributeNames=expression_attribute_names,
+                    ExpressionAttributeValues=expression_attribute_values,
                     ReturnValues="UPDATED_NEW"
                 )
-                return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'message': 'Updated', 'status': new_status})}
+                return {'statusCode': 200, 'headers': headers, 'body': json.dumps({'message': 'Updated'})}
             else:
                 return {'statusCode': 400, 'headers': headers, 'body': json.dumps({'error': 'No fields to update'})}
 

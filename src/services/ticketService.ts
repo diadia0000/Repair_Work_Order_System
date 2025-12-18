@@ -114,6 +114,7 @@ export const ticketService = {
     user_email: string;
     user_name?: string;
     images?: string[];
+    tags?: string[];
   }): Promise<{ message: string; ticket_id: string }> {
     try {
       const data = await fetchAPI(API_ENDPOINTS.tickets, {
@@ -144,6 +145,32 @@ export const ticketService = {
       console.log('[TicketService] Updated ticket:', ticketId, 'to', status);
     } catch (error) {
       console.error('[TicketService] Failed to update ticket:', ticketId, error);
+      throw error;
+    }
+  },
+
+  /**
+   * 編輯工單內容 (標題、描述、圖片、優先級、標籤)
+   * PUT /tickets/{ticket_id}
+   */
+  async editTicket(
+    ticketId: string,
+    updates: {
+      title?: string;
+      description?: string;
+      images?: string[];
+      priority?: PriorityLevel;
+      tags?: string[];
+    }
+  ): Promise<void> {
+    try {
+      await fetchAPI(API_ENDPOINTS.ticketById(ticketId), {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      });
+      console.log('[TicketService] Edited ticket:', ticketId, updates);
+    } catch (error) {
+      console.error('[TicketService] Failed to edit ticket:', ticketId, error);
       throw error;
     }
   },

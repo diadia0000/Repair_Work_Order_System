@@ -5,7 +5,7 @@ import { RegisterPage } from './components/RegisterPage';
 import { NewPasswordPage } from './components/NewPasswordPage';
 import { ConfirmSignUpPage } from './components/ConfirmSignUpPage';
 import { Dashboard } from './components/Dashboard';
-import { Ticket, TicketStatus, PriorityLevel } from './components/TicketCard';
+import { Ticket, TicketStatus, PriorityLevel, TicketTagId } from './components/TicketCard';
 import { ticketService } from './services/ticketService';
 
 function App() {
@@ -176,7 +176,7 @@ function App() {
     }
   };
 
-  const handleCreateTicket = async (newTicket: { title: string; description: string; priority: string; images?: File[] }) => {
+  const handleCreateTicket = async (newTicket: { title: string; description: string; priority: string; images?: File[]; tags?: TicketTagId[] }) => {
     try {
       setError(null);
       console.log('Creating ticket:', newTicket);
@@ -214,6 +214,7 @@ function App() {
         user_email: userEmail,
         user_name: userName,
         images: imageUrls,
+        tags: newTicket.tags,
       });
       
       console.log('Ticket created successfully:', result);
@@ -259,6 +260,66 @@ function App() {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete ticket';
       setError(errorMessage);
       console.error('Error deleting ticket:', err);
+    }
+  };
+
+  const handleEditTicket = async (
+    ticketId: string,
+    updates: { title?: string; description?: string; images?: string[]; priority?: PriorityLevel; tags?: TicketTagId[] },
+    newImageFiles?: File[]
+  ) => {
+    try {
+      setError(null);
+
+      let finalImages = updates.images || [];
+
+      // 上傳新圖片
+      if (newImageFiles && newImageFiles.length > 0) {
+        const uploadPromises = newImageFiles.map(async (file) => {
+          const response = await ticketService.getUploadUrl(file.name, file.type);
+          const { upload_url, image_url } = response;
+
+          if (!upload_url) {
+            throw new Error('Failed to get upload URL from backend');
+          }
+
+          await ticketService.uploadToS3(upload_url, file);
+          return image_url;
+        });
+
+        const newImageUrls = await Promise.all(uploadPromises);
+        finalImages = [...finalImages, ...newImageUrls];
+      }
+
+      // 調用 API 更新
+      await ticketService.editTicket(ticketId, {
+        title: updates.title,
+        description: updates.description,
+        images: finalImages,
+        priority: updates.priority,
+        tags: updates.tags,
+      });
+
+      // 更新本地狀態
+      setTickets(tickets.map(ticket =>
+        ticket.ticket_id === ticketId
+          ? {
+              ...ticket,
+              title: updates.title ?? ticket.title,
+              description: updates.description ?? ticket.description,
+              images: finalImages,
+              priority: updates.priority ?? ticket.priority,
+              tags: updates.tags ?? ticket.tags,
+            }
+          : ticket
+      ));
+
+      console.log(`Ticket ${ticketId} edited`);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to edit ticket';
+      setError(errorMessage);
+      console.error('Error editing ticket:', err);
+      throw err; // 重新拋出讓 Modal 可以處理
     }
   };
 
@@ -313,6 +374,8 @@ function App() {
           onCreateTicket={handleCreateTicket}
           onUpdateTicketStatus={handleUpdateTicketStatus}
           onDeleteTicket={handleDeleteTicket}
+          onEditTicket={handleEditTicket}
+          onRefresh={loadTickets}
           onLogout={handleLogout}
           userEmail={userEmail}
           isAdmin={isAdmin}

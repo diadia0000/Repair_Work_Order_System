@@ -1,11 +1,11 @@
-import { useState, useRef } from 'react';
-import { X, Upload, Trash2 } from 'lucide-react';
-import { PriorityLevel } from './TicketCard';
+import { useState, useRef, useEffect } from 'react';
+import { X, Upload, Trash2, Tag, Loader2 } from 'lucide-react';
+import { PriorityLevel, TICKET_TAGS, TicketTagId } from './TicketCard';
 
 interface CreateTicketModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (ticket: { title: string; description: string; priority: PriorityLevel; images: File[] }) => void;
+  onSubmit: (ticket: { title: string; description: string; priority: PriorityLevel; images: File[]; tags: TicketTagId[] }) => void;
 }
 
 export function CreateTicketModal({ isOpen, onClose, onSubmit }: CreateTicketModalProps) {
@@ -13,17 +13,45 @@ export function CreateTicketModal({ isOpen, onClose, onSubmit }: CreateTicketMod
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<PriorityLevel>('Medium');
   const [images, setImages] = useState<File[]>([]);
+  const [tags, setTags] = useState<TicketTagId[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // UX: 鎖定背景捲動
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  const toggleTag = (tagId: TicketTagId) => {
+    setTags(prev =>
+      prev.includes(tagId)
+        ? prev.filter(t => t !== tagId)
+        : [...prev, tagId]
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ title, description, priority, images });
-    // Reset form
-    setTitle('');
-    setDescription('');
-    setPriority('Medium');
-    setImages([]);
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await onSubmit({ title, description, priority, images, tags });
+      // Reset form
+      setTitle('');
+      setDescription('');
+      setPriority('Medium');
+      setImages([]);
+      setTags([]);
+      onClose();
+    } catch (error) {
+      console.error('Failed to submit:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,18 +82,21 @@ export function CreateTicketModal({ isOpen, onClose, onSubmit }: CreateTicketMod
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 animate-in fade-in duration-200">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="relative card w-full max-w-2xl min-w-[360px] max-h-[90vh] overflow-y-auto p-6 sm:p-8">
+      <div className="relative card w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-8 rounded-t-2xl sm:rounded-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-300">
+        {/* Mobile drag indicator */}
+        <div className="w-10 h-1 bg-[#E2E8F0] rounded-full mx-auto mb-4 sm:hidden"></div>
+
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <h2 className="flex-1">Create New Ticket</h2>
+        <div className="flex items-start justify-between gap-4 mb-4 sm:mb-6">
+          <h2 className="flex-1 text-lg sm:text-xl font-semibold">Create New Ticket</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-[#F1F5F9] rounded-lg transition-colors shrink-0"
@@ -75,21 +106,25 @@ export function CreateTicketModal({ isOpen, onClose, onSubmit }: CreateTicketMod
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* Issue Title */}
           <div>
-            <label htmlFor="title" className="block mb-2 text-[#334155]">
+            <label htmlFor="title" className="block mb-1.5 sm:mb-2 text-sm sm:text-base text-[#334155]">
               Issue Title <span className="text-[#EF4444]">*</span>
             </label>
             <input
               id="title"
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-3 border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all"
+              onChange={(e) => setTitle(e.target.value.slice(0, 100))}
+              maxLength={100}
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-[#E2E8F0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition-all text-sm sm:text-base"
               placeholder="e.g., PC not working"
               required
             />
+            <div className="mt-1 text-right text-xs text-[#94A3B8]">
+              {title.length}/100
+            </div>
           </div>
 
           {/* Description */}
@@ -193,20 +228,58 @@ export function CreateTicketModal({ isOpen, onClose, onSubmit }: CreateTicketMod
             </select>
           </div>
 
+          {/* Category Tags */}
+          <div>
+            <label className="block mb-2 text-[#334155]">
+              <span className="flex items-center gap-2">
+                <Tag className="w-4 h-4" />
+                Category Tags
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {TICKET_TAGS.map(tag => (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => toggleTag(tag.id)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    tags.includes(tag.id)
+                      ? `${tag.color} ring-2 ring-offset-1 ring-current`
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  {tag.label}
+                </button>
+              ))}
+            </div>
+            <small className="text-[#64748B] mt-2 block">
+              Select categories that best describe the issue
+            </small>
+          </div>
+
           {/* Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-[#E2E8F0] text-[#64748B] rounded-lg hover:bg-[#F8FAFC] transition-all order-2 sm:order-1"
+              disabled={isSubmitting}
+              className="flex-1 px-6 py-3 border border-[#E2E8F0] text-[#64748B] rounded-lg hover:bg-[#F8FAFC] transition-all order-2 sm:order-1 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-6 py-3 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg transition-all shadow-sm hover:shadow-md order-1 sm:order-2"
+              disabled={isSubmitting}
+              className="flex-1 px-6 py-3 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-lg transition-all shadow-sm hover:shadow-md order-1 sm:order-2 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              Submit Ticket
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Ticket'
+              )}
             </button>
           </div>
         </form>
