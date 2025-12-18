@@ -3,9 +3,8 @@ import { ResourcesConfig } from 'aws-amplify';
 export const awsConfig: ResourcesConfig = {
   Auth: {
     Cognito: {
-      // 腳本會動態替換 PLACEHOLDER 字串
-      userPoolId: 'PLACEHOLDER_USER_POOL_ID',
-      userPoolClientId: 'PLACEHOLDER_CLIENT_ID',
+      userPoolId: 'us-east-1_M33EMjkq9',
+      userPoolClientId: '6cq6sr2ji1q4ebvsm9174qiphi',
     }
   }
 };
