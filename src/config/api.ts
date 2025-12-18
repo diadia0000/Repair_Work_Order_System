@@ -3,7 +3,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 // API 配置檔案
 // 從 AWS Console -> API Gateway -> Stages -> prod -> Invoke URL 取得
 // 結尾不要有斜線
-export const API_BASE_URL = 'https://hf8t3ei3bk.execute-api.us-east-1.amazonaws.com/dev';
+export const API_BASE_URL = 'PLACEHOLDER_API_URL';
 
 export const API_ENDPOINTS = {
   tickets: `${API_BASE_URL}/tickets`,

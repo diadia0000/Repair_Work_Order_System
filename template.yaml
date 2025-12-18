@@ -1,13 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Repair Work Order System - Final Production Template
+Description: Repair Work Order System - Ultimate Auto-Deploy Template
 
 Globals:
   Function:
-    Runtime: python3.12
+    Runtime: python3.9
     Timeout: 30
     MemorySize: 256
-    Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole" 
     Environment:
       Variables:
         TABLE_NAME: !Ref TicketTable
@@ -16,11 +15,11 @@ Globals:
         SNS_TOPIC_ARN: !Ref TicketNotificationTopic
 
 Resources:
-  # --- 1. Cognito (包含你截圖中的 Admin 群組) ---
+  # --- 1. Cognito 認證系統 ---
   RepairUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: "User pool - vhimgh" # 配合你截圖中的名稱
+      UserPoolName: "User pool - vhimgh"
       AutoVerifiedAttributes: [email]
       Schema:
         - Name: email
@@ -40,7 +39,7 @@ Resources:
       ClientName: "WebClient"
       UserPoolId: !Ref RepairUserPool
 
-  # --- 2. 資料庫與儲存 ---
+  # --- 2. 儲存與資料庫 ---
   TicketTable:
     Type: AWS::Serverless::SimpleTable
     Properties:
@@ -88,7 +87,6 @@ Resources:
     Properties:
       TopicName: "TicketNotificationTopic"
 
-  # 自動建立 Email 訂閱 (配合你截圖中的信箱)
   MyEmailSubscription:
     Type: AWS::SNS::Subscription
     Properties:
@@ -107,6 +105,7 @@ Resources:
   TicketAPIHandler:
     Type: AWS::Serverless::Function
     Properties:
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
       CodeUri: api/
       Handler: TicketAPIHandler.lambda_handler
       Events:
@@ -117,6 +116,7 @@ Resources:
   TicketNotificationWorker:
     Type: AWS::Serverless::Function
     Properties:
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
       CodeUri: api/
       Handler: TicketNotificationWorker.lambda_handler
       Events:
@@ -126,6 +126,10 @@ Resources:
 
 Outputs:
   ApiEndpoint:
-    Value: !Sub "https://${RepairApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/tickets"
+    Value: !Sub "https://${RepairApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+  UserPoolId:
+    Value: !Ref RepairUserPool
+  UserPoolClientId:
+    Value: !Ref RepairUserPoolClient
   WebsiteURL:
     Value: !GetAtt FrontendWebsiteBucket.WebsiteURL
