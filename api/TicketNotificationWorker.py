@@ -1,8 +1,8 @@
 import json
 import boto3
-
+import os
 # --- 設定區 ---
-SNS_TOPIC_ARN = 'arn:aws:sns:us-east-1:463414760499:TicketNotificationTopic' # <--- 貼上你的 SNS ARN
+SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN') # <--- 貼上你的 SNS ARN
 # ------------
 
 sns = boto3.client('sns')
